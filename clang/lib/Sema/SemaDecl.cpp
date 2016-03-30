@@ -2597,6 +2597,9 @@ static bool mergeDeclAttribute(Sema &S, NamedDecl *D,
                                    AMK == Sema::AMK_Override);
   else if (const auto *OA = dyn_cast<OptimizeNoneAttr>(Attr))
     NewAttr = S.mergeOptimizeNoneAttr(D, *OA);
+  else if (const auto *SNA = dyn_cast<SwiftNameAttr>(Attr))
+    NewAttr = S.mergeSwiftNameAttr(D, *SNA, SNA->getName(),
+                                   AMK == Sema::AMK_Override);
   else if (const auto *InternalLinkageA = dyn_cast<InternalLinkageAttr>(Attr))
     NewAttr = S.mergeInternalLinkageAttr(D, *InternalLinkageA);
   else if (const auto *CommonA = dyn_cast<CommonAttr>(Attr))
@@ -2608,6 +2611,8 @@ static bool mergeDeclAttribute(Sema &S, NamedDecl *D,
   else if ((isa<DeprecatedAttr>(Attr) || isa<UnavailableAttr>(Attr)) &&
            (AMK == Sema::AMK_Override ||
             AMK == Sema::AMK_ProtocolImplementation))
+    NewAttr = nullptr;
+  else if (isa<SwiftPrivateAttr>(Attr) && AMK == Sema::AMK_Override)
     NewAttr = nullptr;
   else if (const auto *UA = dyn_cast<UuidAttr>(Attr))
     NewAttr = S.mergeUuidAttr(D, *UA, UA->getGuid(), UA->getGuidDecl());

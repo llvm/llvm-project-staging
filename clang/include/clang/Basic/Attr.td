@@ -101,6 +101,10 @@ def NonStaticNonConstCXXMethod
                     [{!S->isStatic() && !S->isConst()}],
                     "non-static non-const member functions">;
 
+def ObjCClassMethod : SubsetSubject<ObjCMethod,
+                                    [{!S->isInstanceMethod()}],
+                                    "Objective-C class methods">;
+
 def ObjCInstanceMethod : SubsetSubject<ObjCMethod,
                                        [{S->isInstanceMethod()}],
                                        "Objective-C instance methods">;
@@ -1998,6 +2002,12 @@ def ObjCSubclassingRestricted : InheritableAttr {
   let SimpleHandler = 1;
 }
 
+def ObjCCompleteDefinition : InheritableAttr {
+  let Spellings = [GNU<"objc_complete_definition">];
+  let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
+  let Documentation = [Undocumented];
+}
+
 def ObjCExplicitProtocolImpl : InheritableAttr {
   let Spellings = [Clang<"objc_protocol_requires_explicit_implementation">];
   let Subjects = SubjectList<[ObjCProtocol], ErrorDiag>;
@@ -2131,6 +2141,11 @@ def Regparm : TypeAttr {
   let ASTNode = 0;
 }
 
+def SwiftPrivate : InheritableAttr {
+  let Spellings = [GCC<"swift_private">];
+  let Documentation = [Undocumented];
+}
+
 def SwiftBridge : InheritableAttr {
   let Spellings = [GNU<"swift_bridge">];
   let Args = [StringArgument<"SwiftType">];
@@ -2166,6 +2181,15 @@ def SwiftName : InheritableAttr {
   let Spellings = [GNU<"swift_name">];
   let Args = [StringArgument<"Name">];
   let Documentation = [SwiftNameDocs];
+}
+
+def SwiftNewType : InheritableAttr {
+  let Spellings = [GNU<"swift_newtype">, GNU<"swift_wrapper">];
+  let Args = [EnumArgument<"NewtypeKind", "NewtypeKind",
+                           ["struct", "enum"], ["NK_Struct", "NK_Enum"]>];
+  let Subjects = SubjectList<[TypedefName], ErrorDiag>;
+  let Documentation = [SwiftNewTypeDocs];
+  let HasCustomParsing = 1;
 }
 
 def NoDeref : TypeAttr {

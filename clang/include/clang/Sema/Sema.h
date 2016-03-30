@@ -3084,6 +3084,8 @@ public:
                                     StringRef Name, bool Override);
   OptimizeNoneAttr *mergeOptimizeNoneAttr(Decl *D,
                                           const AttributeCommonInfo &CI);
+  SwiftNameAttr *mergeSwiftNameAttr(Decl *D, const AttributeCommonInfo &CI,
+                                    StringRef Name, bool Override);
   InternalLinkageAttr *mergeInternalLinkageAttr(Decl *D, const ParsedAttr &AL);
   InternalLinkageAttr *mergeInternalLinkageAttr(Decl *D,
                                                 const InternalLinkageAttr &AL);

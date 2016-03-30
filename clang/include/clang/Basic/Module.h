@@ -302,6 +302,9 @@ public:
   /// to a regular (public) module map.
   unsigned ModuleMapIsPrivate : 1;
 
+  /// \brief Whether this is a module who has its swift_names inferred.
+  unsigned IsSwiftInferImportAsMember : 1;
+
   /// Whether Umbrella is a directory or header.
   unsigned HasUmbrellaDir : 1;
 
