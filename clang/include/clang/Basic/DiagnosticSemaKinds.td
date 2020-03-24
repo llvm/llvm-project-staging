@@ -754,6 +754,60 @@ def warn_fortify_source_format_overflow : Warning<
   " but format string expands to at least %2">,
   InGroup<FortifySource>;
 
+def err_ptrauth_disabled_target :
+  Error<"this target does not support pointer authentication">;
+def err_ptrauth_disabled :
+  Error<"pointer authentication is disabled for the current target">;
+def err_ptrauth_invalid_key :
+  Error<"%0 does not identify a valid pointer authentication key for "
+        "the current target">;
+def err_ptrauth_value_bad_type :
+  Error<"%select{signed value|extra discriminator|blended pointer|blended "
+        "integer}0 must have %select{pointer|integer|pointer or integer}1 "
+        "type; type here is %2">;
+def err_ptrauth_bad_constant_pointer :
+  Error<"argument to ptrauth_sign_constant must refer to a global variable "
+        "or function">;
+def err_ptrauth_bad_constant_discriminator :
+  Error<"discriminator argument to ptrauth_sign_constant must be a constant "
+        "integer, the address of the global variable where the result "
+        "will be stored, or a blend of the two">;
+def warn_ptrauth_sign_null_pointer :
+  Warning<"signing a null pointer will yield a non-null pointer">,
+  InGroup<PtrAuthNullPointers>;
+def warn_ptrauth_auth_null_pointer :
+  Warning<"authenticating a null pointer will almost certainly trap">,
+  InGroup<PtrAuthNullPointers>;
+def err_ptrauth_string_not_literal : Error<
+  "argument must be a string literal%select{| of char type}0">;
+def err_ptrauth_type_disc_variably_modified : Error<
+   "cannot pass variably-modified type %0 to "
+   "'__builtin_ptrauth_type_discriminator'">;
+def note_ptrauth_virtual_function_pointer_incomplete_arg_ret :
+  Note<"cannot take an address of a virtual member function if its return or "
+       "argument types are incomplete">;
+def note_ptrauth_virtual_function_incomplete_arg_ret_type :
+  Note<"%0 is incomplete">;
+
+// __ptrauth qualifier
+def err_ptrauth_qualifier_return : Error<
+  "return types may not be qualified with __ptrauth; type is %0">;
+def err_ptrauth_qualifier_param : Error<
+  "parameter types may not be qualified with __ptrauth; type is %0">;
+def err_ptrauth_qualifier_cast : Error<
+  "cast types may not be qualified with __ptrauth; type is %0">;
+def err_ptrauth_qualifier_nonpointer : Error<
+  "__ptrauth qualifier may only be applied to pointer types; type here is %0">;
+def err_ptrauth_qualifier_redundant : Error<
+  "type %0 is already __ptrauth-qualified">;
+def err_ptrauth_qualifier_bad_arg_count : Error<
+  "__ptrauth qualifier must take between 1 and 3 arguments">;
+def err_ptrauth_qualifier_arg_not_ice : Error<
+  "argument to __ptrauth must be an integer constant expression">;
+def err_ptrauth_qualifier_address_discrimination_invalid : Error<
+  "address discrimination flag for __ptrauth must be 0 or 1; value is %0">;
+def err_ptrauth_qualifier_extra_discriminator_invalid : Error<
+  "extra discriminator for __ptrauth must be between 0 and %1; value is %0">;
 
 /// main()
 // static main() is not an error in C, just in C++.
@@ -3347,7 +3401,8 @@ def note_cannot_use_trivial_abi_reason : Note<
   "its copy constructors and move constructors are all deleted|"
   "it is polymorphic|"
   "it has a base of a non-trivial class type|it has a virtual base|"
-  "it has a __weak field|it has a field of a non-trivial class type}1">;
+  "it has a __weak field|it has a field of a non-trivial class type|"
+  "it has an address-discriminated __ptrauth field}1">;
 
 // Availability attribute
 def warn_availability_unknown_platform : Warning<
@@ -4290,6 +4345,10 @@ def note_ovl_candidate_bad_ownership : Note<
     "%select{no|__unsafe_unretained|__strong|__weak|__autoreleasing}4 ownership,"
     " but parameter has %select{no|__unsafe_unretained|__strong|__weak|"
     "__autoreleasing}5 ownership">;
+def note_ovl_candidate_bad_ptrauth : Note<
+    "candidate %sub{select_ovl_candidate_kind}0,1,2 not viable: "
+    "%ordinal8 argument (%3) has %select{no ptrauth|%5}4 qualifier,"
+    " but parameter has %select{no ptrauth|%7}6 qualifier">;
 def note_ovl_candidate_bad_cvr_this : Note<
     "candidate %sub{select_ovl_candidate_kind}0,1,2 not viable: "
     "'this' argument has type %3, but method is not marked "
@@ -5291,7 +5350,7 @@ def note_deleted_special_member_class_subobject : Note<
   "%select{default|corresponding|default|default|default}4 constructor}0|"
   "destructor}5"
   "%select{||s||}4"
-  "|is an ObjC pointer}6">;
+  "|is an ObjC pointer|has an address-discriminated ptrauth qualifier}6">;
 def note_deleted_default_ctor_uninit_field : Note<
   "%select{default constructor of|constructor inherited by}0 "
   "%1 is implicitly deleted because field %2 of "
@@ -7952,6 +8011,19 @@ def err_typecheck_incompatible_ownership : Error<
   "sending to parameter of different type}0,1"
   "|%diff{casting $ to type $|casting between types}0,1}2"
   " changes retain/release properties of pointer">;
+def err_typecheck_incompatible_ptrauth : Error<
+  "%select{%diff{assigning $ to $|assigning to different types}1,0"
+  "|%diff{passing $ to parameter of type $|"
+  "passing to parameter of different type}0,1"
+  "|%diff{returning $ from a function with result type $|"
+  "returning from function with different return type}0,1"
+  "|%diff{converting $ to type $|converting between types}0,1"
+  "|%diff{initializing $ with an expression of type $|"
+  "initializing with expression of different type}0,1"
+  "|%diff{sending $ to parameter of type $|"
+  "sending to parameter of different type}0,1"
+  "|%diff{casting $ to type $|casting between types}0,1}2"
+  " changes pointer-authentication of pointee type">;
 def err_typecheck_comparison_of_distinct_blocks : Error<
   "comparison of distinct block types%diff{ ($ and $)|}0,1">;
 
@@ -8287,6 +8359,8 @@ def ext_typecheck_cond_pointer_integer_mismatch : ExtWarn<
   "pointer/integer type mismatch in conditional expression"
   "%diff{ ($ and $)|}0,1">,
   InGroup<DiagGroup<"conditional-type-mismatch">>;
+def err_typecheck_cond_incompatible_ptrauth : Error<
+  "__ptrauth qualification mismatch%diff{ ($ and $)|}0,1">;
 def err_typecheck_choose_expr_requires_constant : Error<
   "'__builtin_choose_expr' requires a constant expression">;
 def warn_unused_expr : Warning<"expression result unused">,

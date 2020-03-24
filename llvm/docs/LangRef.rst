@@ -2189,6 +2189,13 @@ the appropriate GC_TRANSITION nodes in the selection DAG. It is assumed
 that these arguments must be available before and after (but not
 necessarily during) the execution of the callee.
 
+Pointer Authentication Operand Bundles
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Pointer Authentication operand bundles are characterized by the
+``"ptrauth"`` operand bundle tag.  They are described in the
+`Pointer Authentication <PointerAuth.html#operand-bundle>`_ document.
+
 .. _assume_opbundles:
 
 Assume Operand Bundles
@@ -16128,6 +16135,13 @@ Exception Handling Intrinsics
 The LLVM exception handling intrinsics (which all start with
 ``llvm.eh.`` prefix), are described in the `LLVM Exception
 Handling <ExceptionHandling.html#format-common-intrinsics>`_ document.
+
+Pointer Authentication Intrinsics
+---------------------------------
+
+The LLVM pointer authentication intrinsics (which all start with
+``llvm.ptrauth.`` prefix), are described in the `Pointer Authentication
+<PointerAuth.html#intrinsics>`_ document.
 
 .. _int_trampoline:
 

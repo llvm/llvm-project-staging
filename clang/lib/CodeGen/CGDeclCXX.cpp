@@ -227,7 +227,7 @@ void CodeGenFunction::EmitCXXGlobalVarDeclInit(const VarDecl &D,
 
 /// Create a stub function, suitable for being passed to atexit,
 /// which passes the given address to the given destructor function.
-llvm::Function *CodeGenFunction::createAtExitStub(const VarDecl &VD,
+llvm::Constant *CodeGenFunction::createAtExitStub(const VarDecl &VD,
                                                   llvm::FunctionCallee dtor,
                                                   llvm::Constant *addr) {
   // Get the destructor function type, void(*)(void).
@@ -257,7 +257,12 @@ llvm::Function *CodeGenFunction::createAtExitStub(const VarDecl &VD,
 
   CGF.FinishFunction();
 
-  return fn;
+  // Get a proper function pointer.
+  FunctionProtoType::ExtProtoInfo EPI(getContext().getDefaultCallingConvention(
+      /*IsVariadic=*/false, /*IsCXXMethod=*/false));
+  QualType fnType = getContext().getFunctionType(getContext().VoidTy,
+                                                 {getContext().VoidPtrTy}, EPI);
+  return CGM.getFunctionPointer(fn, fnType);
 }
 
 /// Register a global destructor using the C atexit runtime function.
@@ -271,7 +276,7 @@ void CodeGenFunction::registerGlobalDtorWithAtExit(const VarDecl &VD,
 
 void CodeGenFunction::registerGlobalDtorWithAtExit(llvm::Constant *dtorStub) {
   // extern "C" int atexit(void (*f)(void));
-  assert(cast<llvm::Function>(dtorStub)->getFunctionType() ==
+  assert(cast<llvm::PointerType>(dtorStub->getType())->getElementType() ==
              llvm::FunctionType::get(CGM.VoidTy, false) &&
          "Argument to atexit has a wrong type.");
 

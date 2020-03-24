@@ -898,6 +898,15 @@ llvm::DIType *CGDebugInfo::CreateQualifiedType(QualType Ty,
   } else if (Qc.hasRestrict()) {
     Tag = llvm::dwarf::DW_TAG_restrict_type;
     Qc.removeRestrict();
+  } else if (Qc.getPointerAuth().isPresent()) {
+    unsigned Key = Qc.getPointerAuth().getKey();
+    bool IsDiscr = Qc.getPointerAuth().isAddressDiscriminated();
+    unsigned ExtraDiscr = Qc.getPointerAuth().getExtraDiscriminator();
+    Qc.removePtrAuth();
+    assert(Qc.empty() && "Unknown type qualifier for debug info");
+    auto *FromTy = getOrCreateType(QualType(T, 0), Unit);
+    return DBuilder.createPtrAuthQualifiedType(FromTy, Key, IsDiscr,
+                                               ExtraDiscr);
   } else {
     assert(Qc.empty() && "Unknown type qualifier for debug info");
     return getOrCreateType(QualType(T, 0), Unit);
@@ -923,8 +932,8 @@ llvm::DIType *CGDebugInfo::CreateType(const ObjCObjectPointerType *Ty,
                                Ty->getPointeeType(), Unit);
 }
 
-llvm::DIType *CGDebugInfo::CreateType(const PointerType *Ty,
-                                      llvm::DIFile *Unit) {
+llvm::DIType *
+CGDebugInfo::CreateType(const PointerType *Ty, llvm::DIFile *Unit) {
   return CreatePointerLikeType(llvm::dwarf::DW_TAG_pointer_type, Ty,
                                Ty->getPointeeType(), Unit);
 }
@@ -1060,10 +1069,9 @@ CGDebugInfo::getOrCreateRecordFwdDecl(const RecordType *Ty,
   return RetTy;
 }
 
-llvm::DIType *CGDebugInfo::CreatePointerLikeType(llvm::dwarf::Tag Tag,
-                                                 const Type *Ty,
-                                                 QualType PointeeTy,
-                                                 llvm::DIFile *Unit) {
+llvm::DIType *CGDebugInfo::CreatePointerLikeType(
+    llvm::dwarf::Tag Tag, const Type *Ty, QualType PointeeTy,
+    llvm::DIFile *Unit) {
   // Bit size, align and offset of the type.
   // Size is always the size of a pointer. We can't use getTypeSize here
   // because that does not return the correct value for references.

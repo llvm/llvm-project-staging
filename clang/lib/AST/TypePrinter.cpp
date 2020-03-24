@@ -1621,6 +1621,7 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
   case attr::Ptr64:
   case attr::SPtr:
   case attr::UPtr:
+  case attr::PointerAuth:
   case attr::AddressSpace:
   case attr::CmseNSCall:
     llvm_unreachable("This attribute should have been handled already");
@@ -1855,6 +1856,30 @@ void clang::printTemplateArgumentList(raw_ostream &OS,
   printTo(OS, Args, Policy, false);
 }
 
+std::string PointerAuthQualifier::getAsString() const {
+  LangOptions LO;
+  return getAsString(PrintingPolicy(LO));
+}
+
+std::string PointerAuthQualifier::getAsString(const PrintingPolicy &P) const {
+  SmallString<64> Buf;
+  llvm::raw_svector_ostream StrOS(Buf);
+  print(StrOS, P);
+  return std::string(StrOS.str());
+}
+
+bool PointerAuthQualifier::isEmptyWhenPrinted(const PrintingPolicy &P) const {
+  return !isPresent();
+}
+
+void PointerAuthQualifier::print(raw_ostream &OS,
+                                 const PrintingPolicy &P) const {
+  if (!isPresent()) return;
+  OS << "__ptrauth(" << getKey() << ","
+                     << unsigned(isAddressDiscriminated()) << ","
+                     << getExtraDiscriminator() << ")";
+}
+
 std::string Qualifiers::getAsString() const {
   LangOptions LO;
   return getAsString(PrintingPolicy(LO));
@@ -1882,6 +1907,10 @@ bool Qualifiers::isEmptyWhenPrinted(const PrintingPolicy &Policy) const {
 
   if (Qualifiers::ObjCLifetime lifetime = getObjCLifetime())
     if (!(lifetime == Qualifiers::OCL_Strong && Policy.SuppressStrongLifetime))
+      return false;
+
+  if (auto pointerAuth = getPointerAuth())
+    if (!pointerAuth.isEmptyWhenPrinted(Policy))
       return false;
 
   return true;
@@ -1979,6 +2008,14 @@ void Qualifiers::print(raw_ostream &OS, const PrintingPolicy& Policy,
     case Qualifiers::OCL_Weak: OS << "__weak"; break;
     case Qualifiers::OCL_Autoreleasing: OS << "__autoreleasing"; break;
     }
+  }
+
+  if (auto pointerAuth = getPointerAuth()) {
+    if (addSpace)
+      OS << ' ';
+    addSpace = true;
+
+    pointerAuth.print(OS, Policy);
   }
 
   if (appendSpaceIfNonEmpty && addSpace)

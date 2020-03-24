@@ -5823,6 +5823,30 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasFlag(options::OPT_fcommon, options::OPT_fno_common, false))
     CmdArgs.push_back("-fcommon");
 
+  if (Args.hasFlag(options::OPT_fptrauth_intrinsics,
+                   options::OPT_fno_ptrauth_intrinsics, false))
+    CmdArgs.push_back("-fptrauth-intrinsics");
+
+  if (Args.hasFlag(options::OPT_fptrauth_calls,
+                   options::OPT_fno_ptrauth_calls, false))
+    CmdArgs.push_back("-fptrauth-calls");
+
+  if (Args.hasFlag(options::OPT_fptrauth_returns,
+                   options::OPT_fno_ptrauth_returns, false))
+    CmdArgs.push_back("-fptrauth-returns");
+
+  if (Args.hasFlag(options::OPT_fptrauth_indirect_gotos,
+                   options::OPT_fno_ptrauth_indirect_gotos, false))
+    CmdArgs.push_back("-fptrauth-indirect-gotos");
+
+  if (Args.hasFlag(options::OPT_fptrauth_auth_traps,
+                   options::OPT_fno_ptrauth_auth_traps, false))
+    CmdArgs.push_back("-fptrauth-auth-traps");
+
+  if (Args.hasFlag(options::OPT_fptrauth_soft,
+                   options::OPT_fno_ptrauth_soft, false))
+    CmdArgs.push_back("-fptrauth-soft");
+
   // -fsigned-bitfields is default, and clang doesn't yet support
   // -funsigned-bitfields.
   if (!Args.hasFlag(options::OPT_fsigned_bitfields,

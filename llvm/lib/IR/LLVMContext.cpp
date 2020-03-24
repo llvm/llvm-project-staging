@@ -78,6 +78,11 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
          "gc-transition operand bundle id drifted!");
   (void)GCLiveEntry;
 
+  auto *PtrauthEntry = pImpl->getOrInsertBundleTag("ptrauth");
+  assert(PtrauthEntry->second == LLVMContext::OB_ptrauth &&
+         "ptrauth operand bundle id drifted!");
+  (void)PtrauthEntry;
+
   SyncScope::ID SingleThreadSSID =
       pImpl->getOrInsertSyncScopeID("singlethread");
   assert(SingleThreadSSID == SyncScope::SingleThread &&

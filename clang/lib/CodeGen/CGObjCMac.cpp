@@ -2985,7 +2985,7 @@ std::string CGObjCCommonMac::getRCBlockLayoutStr(CodeGenModule &CGM,
                                                  const CGBlockInfo &blockInfo) {
   fillRunSkipBlockVars(CGM, blockInfo);
   return getBlockLayoutInfoString(RunSkipBlockVars,
-                                  blockInfo.needsCopyDisposeHelpers());
+                                  blockInfo.needsCopyDisposeHelpers(CGM.getContext()));
 }
 
 llvm::Constant *CGObjCCommonMac::BuildByrefLayout(CodeGen::CodeGenModule &CGM,
@@ -6805,7 +6805,14 @@ void CGObjCNonFragileABIMac::emitMethodConstant(ConstantArrayBuilder &builder,
   } else {
     llvm::Function *fn = GetMethodDefinition(MD);
     assert(fn && "no definition for method?");
-    method.addBitCast(fn, ObjCTypes.Int8PtrTy);
+
+    if (const auto &schema =
+            CGM.getCodeGenOpts().PointerAuth.ObjCMethodListFunctionPointers) {
+      auto *bitcast = llvm::ConstantExpr::getBitCast(fn, ObjCTypes.Int8PtrTy);
+      method.addSignedPointer(bitcast, schema, GlobalDecl(), QualType());
+    } else {
+      method.addBitCast(fn, ObjCTypes.Int8PtrTy);
+    }
   }
 
   method.finishAndAddTo(builder);
@@ -7378,7 +7385,8 @@ CGObjCNonFragileABIMac::EmitVTableMessageSend(CodeGenFunction &CGF,
   llvm::Value *calleePtr = CGF.Builder.CreateLoad(calleeAddr, "msgSend_fn");
 
   calleePtr = CGF.Builder.CreateBitCast(calleePtr, MSI.MessengerType);
-  CGCallee callee(CGCalleeInfo(), calleePtr);
+  CGPointerAuthInfo pointerAuth; // This code path is unsupported.
+  CGCallee callee(CGCalleeInfo(), calleePtr, pointerAuth);
 
   RValue result = CGF.EmitCall(MSI.CallInfo, callee, returnSlot, args);
   return nullReturn.complete(CGF, returnSlot, result, resultType, formalArgs,
@@ -7444,7 +7452,12 @@ CGObjCNonFragileABIMac::GetClassGlobal(StringRef Name,
   }
 
   assert(GV->getLinkage() == L);
-  return GV;
+
+  if (IsForDefinition ||
+      GV->getValueType() == ObjCTypes.ClassnfABITy)
+    return GV;
+
+  return llvm::ConstantExpr::getBitCast(GV, ObjCTypes.ClassnfABIPtrTy);
 }
 
 llvm::Constant *
@@ -7575,7 +7588,8 @@ llvm::Value *CGObjCNonFragileABIMac::EmitMetaClassRef(CodeGenFunction &CGF,
 llvm::Value *CGObjCNonFragileABIMac::GetClass(CodeGenFunction &CGF,
                                               const ObjCInterfaceDecl *ID) {
   if (ID->isWeakImported()) {
-    auto ClassGV = GetClassGlobal(ID, /*metaclass*/ false, NotForDefinition);
+    llvm::Constant *ClassGV = GetClassGlobal(ID, /*metaclass*/ false,
+                                             NotForDefinition);
     (void)ClassGV;
     assert(!isa<llvm::GlobalVariable>(ClassGV) ||
            cast<llvm::GlobalVariable>(ClassGV)->hasExternalWeakLinkage());
@@ -7878,11 +7892,17 @@ CGObjCNonFragileABIMac::GetInterfaceEHType(const ObjCInterfaceDecl *ID,
   }
 
   llvm::Value *VTableIdx = llvm::ConstantInt::get(CGM.Int32Ty, 2);
+  llvm::Constant *VTablePtr = llvm::ConstantExpr::getInBoundsGetElementPtr(
+      VTableGV->getValueType(), VTableGV, VTableIdx);
+
   ConstantInitBuilder builder(CGM);
   auto values = builder.beginStruct(ObjCTypes.EHTypeTy);
-  values.add(
-    llvm::ConstantExpr::getInBoundsGetElementPtr(VTableGV->getValueType(),
-                                                 VTableGV, VTableIdx));
+
+  if (auto &Schema = CGM.getCodeGenOpts().PointerAuth.CXXVTablePointers) {
+    values.addSignedPointer(VTablePtr, Schema, GlobalDecl(), QualType());
+  } else {
+    values.add(VTablePtr);
+  }
   values.add(GetClassName(ClassName));
   values.add(GetClassGlobal(ID, /*metaclass*/ false, NotForDefinition));
 

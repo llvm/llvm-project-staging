@@ -1034,8 +1034,10 @@ def : ProcessorModel<"thunderx3t110", ThunderX3T110Model, [ProcThunderX3T110]>;
 // FIXME: HiSilicon TSV110 is currently modeled as a Cortex-A57.
 def : ProcessorModel<"tsv110", CortexA57Model, [ProcTSV110]>;
 
-// Support cyclone as an alias for apple-a7 so we can still LTO old bitcode.
+// Support some CPU codenames as aliases for apple-aN so we can still LTO old bitcode.
 def : ProcessorModel<"cyclone", CycloneModel, [ProcAppleA7]>;
+def : ProcessorModel<"vortex", CycloneModel, [ProcAppleA12]>;
+def : ProcessorModel<"lightning", CycloneModel, [ProcAppleA13]>;
 
 // iPhone and iPad CPUs
 def : ProcessorModel<"apple-a7", CycloneModel, [ProcAppleA7]>;

@@ -1936,7 +1936,7 @@ CGCallee MicrosoftCXXABI::getVirtualFunctionPointer(CodeGenFunction &CGF,
     VFunc = Builder.CreateAlignedLoad(VFuncPtr, CGF.getPointerAlign());
   }
 
-  CGCallee Callee(GD, VFunc);
+  CGCallee Callee(GD, VFunc, /*unsigned*/ CGPointerAuthInfo());
   return Callee;
 }
 
@@ -3422,7 +3422,7 @@ CGCallee MicrosoftCXXABI::EmitLoadOfMemberFunctionPointer(
 
   FunctionPointer =
     Builder.CreateBitCast(FunctionPointer, FTy->getPointerTo());
-  CGCallee Callee(FPT, FunctionPointer);
+  CGCallee Callee(FPT, FunctionPointer, /*unsigned*/ CGPointerAuthInfo());
   return Callee;
 }
 

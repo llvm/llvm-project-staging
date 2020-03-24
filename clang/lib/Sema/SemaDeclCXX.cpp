@@ -8699,6 +8699,8 @@ struct SpecialMemberDeletionInfo
 
   bool shouldDeleteForVariantObjCPtrMember(FieldDecl *FD, QualType FieldType);
 
+  bool shouldDeleteForVariantPtrAuthMember(FieldDecl *FD, QualType FieldType);
+
   bool visitBase(CXXBaseSpecifier *Base) { return shouldDeleteForBase(Base); }
   bool visitField(FieldDecl *Field) { return shouldDeleteForField(Field); }
 
@@ -8848,11 +8850,35 @@ bool SpecialMemberDeletionInfo::shouldDeleteForVariantObjCPtrMember(
     S.Diag(FD->getLocation(),
            diag::note_deleted_special_member_class_subobject)
         << getEffectiveCSM() << ParentClass << /*IsField*/true
-        << FD << 4 << /*IsDtorCallInCtor*/false << /*IsObjCPtr*/true;
+        << FD << 4 << /*IsDtorCallInCtor*/false << 1;
   }
 
   return true;
 }
+
+bool SpecialMemberDeletionInfo::shouldDeleteForVariantPtrAuthMember(
+    FieldDecl *FD, QualType FieldType) {
+  // Copy/move constructors/assignment operators are deleted if the field has an
+  // address-discriminated ptrauth qualifier.
+  PointerAuthQualifier Q = FieldType.getPointerAuth();
+
+  if (!Q || !Q.isAddressDiscriminated())
+    return false;
+
+  if (CSM == Sema::CXXDefaultConstructor || CSM == Sema::CXXDestructor)
+    return false;
+
+  if (Diagnose) {
+    auto *ParentClass = cast<CXXRecordDecl>(FD->getParent());
+    S.Diag(FD->getLocation(),
+           diag::note_deleted_special_member_class_subobject)
+        << getEffectiveCSM() << ParentClass << /*IsField*/true
+        << FD << 4 << /*IsDtorCallInCtor*/false << 2;
+  }
+
+  return true;
+}
+
 
 /// Check whether we should delete a special member function due to the class
 /// having a particular direct or virtual base class.
@@ -8890,6 +8916,9 @@ bool SpecialMemberDeletionInfo::shouldDeleteForField(FieldDecl *FD) {
   CXXRecordDecl *FieldRecord = FieldType->getAsCXXRecordDecl();
 
   if (inUnion() && shouldDeleteForVariantObjCPtrMember(FD, FieldType))
+    return true;
+
+  if (inUnion() && shouldDeleteForVariantPtrAuthMember(FD, FieldType))
     return true;
 
   if (CSM == Sema::CXXDefaultConstructor) {
@@ -8954,6 +8983,9 @@ bool SpecialMemberDeletionInfo::shouldDeleteForField(FieldDecl *FD) {
         QualType UnionFieldType = S.Context.getBaseElementType(UI->getType());
 
         if (shouldDeleteForVariantObjCPtrMember(&*UI, UnionFieldType))
+          return true;
+
+        if (shouldDeleteForVariantPtrAuthMember(&*UI, UnionFieldType))
           return true;
 
         if (!UnionFieldType.isConstQualified())
@@ -9778,6 +9810,12 @@ void Sema::checkIllFormedTrivialABIStruct(CXXRecordDecl &RD) {
     QualType FT = FD->getType();
     if (FT.getObjCLifetime() == Qualifiers::OCL_Weak) {
       PrintDiagAndRemoveAttr(4);
+      return;
+    }
+
+    // Ill-formed if the field is an address-discriminated pointer.
+    if (FT.hasAddressDiscriminatedPointerAuth()) {
+      PrintDiagAndRemoveAttr(6);
       return;
     }
 

@@ -40,7 +40,18 @@ std::string aarch64::getAArch64TargetCPU(const ArgList &Args,
   // Handle CPU name is 'native'.
   if (CPU == "native")
     return std::string(llvm::sys::getHostCPUName());
-  else if (CPU.size())
+
+  // arm64e requires v8.3a and only runs on vortex and later CPUs.
+  if (Triple.getArchName() == "arm64e") {
+    // Honor -mcpu as long it doesn't specify an older CPU than "vortex".
+    if (CPU.size() && (CPU != "cyclone"))
+      return CPU;
+
+    // Otherwise default to "vortex".
+    return "vortex";
+  }
+
+  if (CPU.size())
     return CPU;
 
   // Make sure we pick the appropriate Apple CPU if -arch is used or when
@@ -149,11 +160,15 @@ getAArch64MicroArchFeaturesFromMtune(const Driver &D, StringRef Mtune,
   // Handle CPU name is 'native'.
   if (MtuneLowerCase == "native")
     MtuneLowerCase = std::string(llvm::sys::getHostCPUName());
-  if (MtuneLowerCase == "cyclone" ||
+
+  // 'cyclone' and later have zero-cycle register moves and zeroing.
+  if (MtuneLowerCase == "cyclone" || MtuneLowerCase == "vortex" ||
+      MtuneLowerCase == "lightning" ||
       StringRef(MtuneLowerCase).startswith("apple")) {
     Features.push_back("+zcm");
     Features.push_back("+zcz");
   }
+
   return true;
 }
 

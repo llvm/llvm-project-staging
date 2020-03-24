@@ -196,6 +196,7 @@
 ; CHECK-NEXT:       AArch64 Branch Targets
 ; CHECK-NEXT:       Branch relaxation pass
 ; CHECK-NEXT:       AArch64 Compress Jump Tables
+; CHECK-NEXT:       AArch64 Expand Hardened Pseudos
 ; CHECK-NEXT:       Unpack machine instruction bundles
 ; CHECK-NEXT:       Contiguously Lay Out Funclets
 ; CHECK-NEXT:       StackMap Liveness Analysis

@@ -2369,6 +2369,9 @@ public:
                             SourceLocation AtomicQualLoc = SourceLocation(),
                             SourceLocation UnalignedQualLoc = SourceLocation());
 
+  void diagnosePointerAuthDisabled(SourceLocation loc, SourceRange range);
+  bool checkConstantPointerAuthKey(Expr *keyExpr, unsigned &key);
+
   static bool adjustContextForLocalExternDecl(DeclContext *&DC);
   void DiagnoseFunctionSpecifiers(const DeclSpec &DS);
   NamedDecl *getShadowedDeclaration(const TypedefNameDecl *D,

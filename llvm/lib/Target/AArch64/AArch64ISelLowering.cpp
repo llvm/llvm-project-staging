@@ -113,6 +113,10 @@ EnableOptimizeLogicalImm("aarch64-enable-logical-imm", cl::Hidden,
                                   "optimization"),
                          cl::init(true));
 
+static cl::opt<bool> AArch64PtrAuthGlobalDynamicMat(
+  "aarch64-ptrauth-global-dynamic-mat", cl::Hidden, cl::init(true),
+  cl::desc("Always materialize llvm.ptrauth global references dynamically"));
+
 /// Value type used for condition codes.
 static const MVT MVT_CC = MVT::i32;
 
@@ -329,6 +333,8 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SELECT_CC, MVT::f64, Custom);
   setOperationAction(ISD::BR_JT, MVT::Other, Custom);
   setOperationAction(ISD::JumpTable, MVT::i64, Custom);
+
+  setOperationAction(ISD::PtrAuthGlobalAddress, MVT::i64, Custom);
 
   setOperationAction(ISD::SHL_PARTS, MVT::i64, Custom);
   setOperationAction(ISD::SRA_PARTS, MVT::i64, Custom);
@@ -3725,6 +3731,8 @@ SDValue AArch64TargetLowering::LowerOperation(SDValue Op,
     return LowerGlobalAddress(Op, DAG);
   case ISD::GlobalTLSAddress:
     return LowerGlobalTLSAddress(Op, DAG);
+  case ISD::PtrAuthGlobalAddress:
+    return LowerPtrAuthGlobalAddress(Op, DAG);
   case ISD::SETCC:
   case ISD::STRICT_FSETCC:
   case ISD::STRICT_FSETCCS:
@@ -4989,6 +4997,17 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
     if (OpFlags & AArch64II::MO_GOT) {
       Callee = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, OpFlags);
       Callee = DAG.getNode(AArch64ISD::LOADgot, DL, PtrVT, Callee);
+    } else if (Subtarget->isTargetCOFF() && GV->hasDLLImportStorageClass()) {
+      assert(Subtarget->isTargetWindows() &&
+             "Windows is the only supported COFF target");
+      Callee = getGOT(G, DAG, AArch64II::MO_DLLIMPORT);
+    } else if (GV->getSection() == "llvm.ptrauth") {
+      // FIXME: this should deal with PtrAuthGlobalAddress instead
+      // If we're directly referencing a ptrauth wrapper, we need to materialize
+      // it from its __auth_ptr slot.
+      // We combine some of these into the call; ideally we'd catch them all.
+      Callee = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, /*TargetFlags=*/0);
+      Callee = DAG.getNode(AArch64ISD::LOADgot, DL, PtrVT, Callee);
     } else {
       const GlobalValue *GV = G->getGlobal();
       Callee = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, 0);
@@ -5015,6 +5034,8 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
     InFlag = Chain.getValue(1);
   }
 
+  unsigned Opc = IsTailCall ? AArch64ISD::TC_RETURN : AArch64ISD::CALL;
+
   std::vector<SDValue> Ops;
   Ops.push_back(Chain);
   Ops.push_back(Callee);
@@ -5024,6 +5045,17 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
     // this information must travel along with the operation for eventual
     // consumption by emitEpilogue.
     Ops.push_back(DAG.getTargetConstant(FPDiff, DL, MVT::i32));
+  }
+
+  if (CLI.PAI) {
+    const uint64_t Key = CLI.PAI->Key;
+    // Authenticated calls only support IA and IB.
+    if (Key > 1)
+      report_fatal_error("Unsupported key kind for authenticating call");
+
+    Opc = IsTailCall ? AArch64ISD::AUTH_TC_RETURN : AArch64ISD::AUTH_CALL;
+    Ops.push_back(DAG.getTargetConstant(Key, DL, MVT::i32));
+    Ops.push_back(CLI.PAI->Discriminator);
   }
 
   // Add argument registers to the end of the list so that they are known live
@@ -5063,13 +5095,13 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
   // actual call instruction.
   if (IsTailCall) {
     MF.getFrameInfo().setHasTailCall();
-    SDValue Ret = DAG.getNode(AArch64ISD::TC_RETURN, DL, NodeTys, Ops);
+    SDValue Ret = DAG.getNode(Opc, DL, NodeTys, Ops);
     DAG.addCallSiteInfo(Ret.getNode(), std::move(CSInfo));
     return Ret;
   }
 
   // Returns a chain and a flag for retval copy to use.
-  Chain = DAG.getNode(AArch64ISD::CALL, DL, NodeTys, Ops);
+  Chain = DAG.getNode(Opc, DL, NodeTys, Ops);
   DAG.addNoMergeSiteInfo(Chain.getNode(), CLI.NoMerge);
   InFlag = Chain.getValue(1);
   DAG.addCallSiteInfo(Chain.getNode(), std::move(CSInfo));
@@ -5399,10 +5431,24 @@ AArch64TargetLowering::LowerDarwinGlobalTLSAddress(SDValue Op,
   // normal AArch64 call node: x0 takes the address of the descriptor, and
   // returns the address of the variable in this thread.
   Chain = DAG.getCopyToReg(Chain, DL, AArch64::X0, DescAddr, SDValue());
+
+  unsigned Opcode = AArch64ISD::CALL;
+  SmallVector<SDValue, 8> Ops;
+  Ops.push_back(Chain);
+  Ops.push_back(FuncTLVGet);
+
+  // With ptrauth-calls, the tlv access thunk pointer is authenticated (IA, 0).
+  if (DAG.getMachineFunction().getFunction().hasFnAttribute("ptrauth-calls")) {
+    Opcode = AArch64ISD::AUTH_CALL;
+    Ops.push_back(DAG.getTargetConstant(AArch64PACKey::IA, DL, MVT::i32));
+    Ops.push_back(DAG.getTargetConstant(0, DL, MVT::i64));
+  }
+
+  Ops.push_back(DAG.getRegister(AArch64::X0, MVT::i64));
+  Ops.push_back(DAG.getRegisterMask(Mask));
+  Ops.push_back(Chain.getValue(1));
   Chain =
-      DAG.getNode(AArch64ISD::CALL, DL, DAG.getVTList(MVT::Other, MVT::Glue),
-                  Chain, FuncTLVGet, DAG.getRegister(AArch64::X0, MVT::i64),
-                  DAG.getRegisterMask(Mask), Chain.getValue(1));
+    DAG.getNode(Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue), Ops);
   return DAG.getCopyFromReg(Chain, DL, AArch64::X0, PtrVT, Chain.getValue(1));
 }
 
@@ -5690,6 +5736,121 @@ SDValue AArch64TargetLowering::LowerGlobalTLSAddress(SDValue Op,
     return LowerWindowsGlobalTLSAddress(Op, DAG);
 
   llvm_unreachable("Unexpected platform trying to use TLS");
+}
+
+SDValue AArch64TargetLowering::LowerPtrAuthGlobalAddressViaGOT(
+  SDValue Wrapper, AArch64PACKey::ID Key, bool HasAddrDiversity,
+  GlobalAddressSDNode *PtrBaseGA, SelectionDAG &DAG) const {
+
+  // Most llvm.ptrauth global references can be lowered using a stub.
+  // However, we cannot do that for address-diversified stub references:
+  // the stub relocation would be signed with the stub address, which
+  // is meaningless.
+  if (HasAddrDiversity)
+    return SDValue();
+
+  // Both key allocation and the wrapper usage support are target-specific.
+  if (!Subtarget->isTargetMachO())
+    llvm_unreachable("Unimplemented ptrauth global lowering");
+
+  // Process-specific keys are dangerous when used in relocations.
+  if (Key == AArch64PACKey::IB || Key == AArch64PACKey::DB) {
+    // ..but that's our only way to implement weak references.  Ban the combo.
+    if (PtrBaseGA->getGlobal()->hasExternalWeakLinkage())
+      report_fatal_error("Unsupported weak B-key ptrauth global reference");
+    return SDValue();
+  }
+
+  // In general, we don't want to abuse the pointer section, because
+  // that provides an attractive target, containing a cluster of
+  // already-signed pointers.
+  //
+  // FIXME: As an optimization, we could use the pointer section for
+  // global references that are used often.
+  //
+  // For now, materialize references dynamically, whenever possible.
+  //
+  // Don't do it for weak references, to avoid emitting another null-check.
+  if (AArch64PtrAuthGlobalDynamicMat &&
+      !PtrBaseGA->getGlobal()->hasExternalWeakLinkage())
+    return SDValue();
+
+  EVT VT = Wrapper.getValueType();
+  SDLoc DL(Wrapper);
+
+  // Use the wrapper directly, and let AsmPrinter turn it into $auth_ptr$
+  // That's only implemented for MachO.
+  GlobalAddressSDNode *WrapperN = cast<GlobalAddressSDNode>(Wrapper.getNode());
+  Wrapper = DAG.getTargetGlobalAddress(WrapperN->getGlobal(), DL, VT,
+                                       /*Offset=*/0, /*TargetFlags=*/0);
+  return DAG.getNode(AArch64ISD::LOADgot, DL, VT, Wrapper);
+}
+
+SDValue
+AArch64TargetLowering::LowerPtrAuthGlobalAddress(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  SDValue Wrapper = Op.getOperand(0);
+  SDValue Ptr = Op.getOperand(1);
+  uint64_t KeyC = Op.getConstantOperandVal(2);
+  SDValue AddrDiscriminator = Op.getOperand(3);
+  SDValue Discriminator = Op.getOperand(4);
+  uint64_t DiscriminatorC = Op.getConstantOperandVal(4);
+  EVT VT = Op.getValueType();
+  SDLoc DL(Op);
+
+  bool HasAddrDiversity = !isNullConstant(AddrDiscriminator);
+
+  uint64_t PtrOffsetC = 0;
+  if (Ptr.getOpcode() == ISD::ADD) {
+    PtrOffsetC = Ptr.getConstantOperandVal(1);
+    Ptr = Ptr.getOperand(0);
+  }
+  GlobalAddressSDNode *PtrN = cast<GlobalAddressSDNode>(Ptr.getNode());
+  SDValue TPtr = DAG.getTargetGlobalAddress(PtrN->getGlobal(), DL, VT,
+                                            /*Offset=*/0, /*TargetFlags=*/0);
+  PtrOffsetC += PtrN->getOffset();
+  assert(PtrN->getTargetFlags() == 0 && "Unsupported tflags on ptrauth global");
+
+  // Emit code to dynamically sign llvm.ptrauth global references.
+  // The alternative is to use a section of pointers (see ViaGOT helper).
+  //
+  // FIXME: An alternative lowering would be to simply use the address
+  // discriminator as a pointer and load the fully signed value from
+  // there.
+  if (SDValue Ld = LowerPtrAuthGlobalAddressViaGOT(Wrapper,
+                                                   (AArch64PACKey::ID)KeyC,
+                                                   HasAddrDiversity, PtrN, DAG))
+    return Ld;
+
+
+  // If we're using an address discriminator, compute the full discriminator
+  // here, to avoid needing to carry a potentially complex constant expr all the
+  // way to the pseudo expansion.
+  if (HasAddrDiversity) {
+    SDValue BlendIntID = DAG.getTargetConstant(Intrinsic::ptrauth_blend, DL, VT);
+    AddrDiscriminator =
+      DAG.getNode(ISD::INTRINSIC_WO_CHAIN, DL, VT, BlendIntID,
+                  AddrDiscriminator, Discriminator);
+    DiscriminatorC = 0;
+  }
+
+  SDValue PtrOffset = DAG.getTargetConstant(PtrOffsetC, DL, MVT::i64);
+  SDValue Key = DAG.getTargetConstant(KeyC, DL, MVT::i32);
+  Discriminator = DAG.getTargetConstant(DiscriminatorC, DL, VT);
+
+  SDValue X16Copy =
+    DAG.getCopyToReg(DAG.getEntryNode(), DL, AArch64::X16,
+                     DAG.getUNDEF(MVT::i64), SDValue());
+  SDValue X17Copy =
+    DAG.getCopyToReg(DAG.getEntryNode(), DL, AArch64::X17,
+                     DAG.getUNDEF(MVT::i64), X16Copy.getValue(1));
+
+  SDNode *MOV =
+      DAG.getMachineNode(AArch64::MOVaddrPAC, DL, {MVT::Other, MVT::Glue},
+                         {TPtr, PtrOffset, Key, AddrDiscriminator,
+                          Discriminator, X17Copy.getValue(1)});
+  return DAG.getCopyFromReg(SDValue(MOV, 0), DL, AArch64::X16, MVT::i64,
+                            SDValue(MOV, 1));
 }
 
 SDValue AArch64TargetLowering::LowerBR_CC(SDValue Op, SelectionDAG &DAG) const {
@@ -6328,6 +6489,21 @@ SDValue AArch64TargetLowering::LowerBR_JT(SDValue Op,
   auto *AFI = DAG.getMachineFunction().getInfo<AArch64FunctionInfo>();
   AFI->setJumpTableEntryInfo(JTI, 4, nullptr);
 
+  // With aarch64-hardened-codegen, we only expand the full jump table dispatch
+  // sequence later, to guarantee the integrity of the intermediate values.
+  if (DAG.getMachineFunction().getFunction()
+        .hasFnAttribute("jump-table-hardening") ||
+      Subtarget->getTargetTriple().getArchName() == "arm64e") {
+    if (getTargetMachine().getCodeModel() != CodeModel::Small)
+      report_fatal_error("Unsupported code-model for hardened jump-table");
+    SDValue Chain = DAG.getCopyToReg(DAG.getEntryNode(), DL, AArch64::X16,
+                                     Entry, SDValue());
+    SDNode *B = DAG.getMachineNode(AArch64::BR_JumpTable, DL, MVT::Other,
+                                   DAG.getTargetJumpTable(JTI, MVT::i32),
+                                   Chain.getValue(0), Chain.getValue(1));
+    return SDValue(B, 0);
+  }
+
   SDNode *Dest =
       DAG.getMachineNode(AArch64::JumpTableDest32, DL, MVT::i64, MVT::i64, JT,
                          Entry, DAG.getTargetJumpTable(JTI, MVT::i32));
@@ -6627,18 +6803,30 @@ SDValue AArch64TargetLowering::LowerRETURNADDR(SDValue Op,
 
   EVT VT = Op.getValueType();
   SDLoc DL(Op);
+  SDValue ReturnAddr;
+  SDValue FrameAddr;
   unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
   if (Depth) {
-    SDValue FrameAddr = LowerFRAMEADDR(Op, DAG);
+    SDNodeFlags Flags;
+    Flags.setNoUnsignedWrap(true);
+    FrameAddr = LowerFRAMEADDR(Op, DAG);
     SDValue Offset = DAG.getConstant(8, DL, getPointerTy(DAG.getDataLayout()));
-    return DAG.getLoad(VT, DL, DAG.getEntryNode(),
-                       DAG.getNode(ISD::ADD, DL, VT, FrameAddr, Offset),
-                       MachinePointerInfo());
+    ReturnAddr = DAG.getLoad(VT, DL, DAG.getEntryNode(),
+                     DAG.getNode(ISD::ADD, DL, VT, FrameAddr, Offset, Flags),
+                     MachinePointerInfo());
+  } else {
+    unsigned LRReg = MF.addLiveIn(AArch64::LR, &AArch64::GPR64RegClass);
+    ReturnAddr = DAG.getCopyFromReg(DAG.getEntryNode(), DL, LRReg, VT);
   }
 
-  // Return LR, which contains the return address. Mark it an implicit live-in.
-  unsigned Reg = MF.addLiveIn(AArch64::LR, &AArch64::GPR64RegClass);
-  return DAG.getCopyFromReg(DAG.getEntryNode(), DL, Reg, VT);
+  // If we're doing LR signing, we need to fixup ReturnAddr: strip it.
+  if (!MF.getFunction().hasFnAttribute("ptrauth-returns"))
+    return ReturnAddr;
+
+  return DAG.getNode(
+        ISD::INTRINSIC_WO_CHAIN, DL, VT,
+        DAG.getConstant(Intrinsic::ptrauth_strip, DL, MVT::i32), ReturnAddr,
+        DAG.getConstant(AArch64PACKey::IB, DL, MVT::i32));
 }
 
 /// LowerShiftRightParts - Lower SRA_PARTS, which returns two
