@@ -32,9 +32,11 @@ class Tool;
 struct CrashReportInfo {
   StringRef Filename;
   StringRef VFSPath;
+  StringRef IndexStorePath;
 
-  CrashReportInfo(StringRef Filename, StringRef VFSPath)
-      : Filename(Filename), VFSPath(VFSPath) {}
+  CrashReportInfo(StringRef Filename, StringRef VFSPath,
+                  StringRef IndexStorePath)
+      : Filename(Filename), VFSPath(VFSPath), IndexStorePath(IndexStorePath) {}
 };
 
 // Encodes the kind of response file supported for a command invocation.

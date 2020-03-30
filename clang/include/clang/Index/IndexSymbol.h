@@ -54,6 +54,8 @@ enum class SymbolKind : uint8_t {
 
   Parameter,
   Using,
+
+  CommentTag,
   TemplateTypeParm,
   TemplateTemplateParm,
   NonTypeTemplateParm,
@@ -75,6 +77,28 @@ enum class SymbolSubKind : uint8_t {
   AccessorSetter,
   UsingTypename,
   UsingValue,
+
+  // Swift sub-kinds
+
+  SwiftAccessorWillSet,
+  SwiftAccessorDidSet,
+  SwiftAccessorAddressor,
+  SwiftAccessorMutableAddressor,
+  SwiftAccessorRead,
+  SwiftAccessorModify,
+
+  SwiftExtensionOfStruct,
+  SwiftExtensionOfClass,
+  SwiftExtensionOfEnum,
+  SwiftExtensionOfProtocol,
+
+  SwiftPrefixOperator,
+  SwiftPostfixOperator,
+  SwiftInfixOperator,
+
+  SwiftSubscript,
+  SwiftAssociatedType,
+  SwiftGenericTypeParam,
 };
 
 typedef uint16_t SymbolPropertySet;

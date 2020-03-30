@@ -125,4 +125,6 @@ std::string getClangFullCPPVersion() {
   return OS.str();
 }
 
+unsigned getClangMajorVersionNumber() { return CLANG_VERSION_MAJOR; }
+
 } // end namespace clang

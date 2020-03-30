@@ -179,6 +179,12 @@ class CompilerInstance : public ModuleLoader {
   /// The list of active output files.
   std::list<OutputFile> OutputFiles;
 
+  /// \brief An optional callback function used to wrap all FrontendActions
+  /// produced to generate imported modules before they are executed.
+  std::function<std::unique_ptr<FrontendAction>
+    (const FrontendOptions &opts, std::unique_ptr<FrontendAction> action)>
+    GenModuleActionWrapper;
+
   /// Force an output buffer.
   std::unique_ptr<llvm::raw_pwrite_stream> OutputStream;
 
@@ -815,6 +821,15 @@ public:
   GlobalModuleIndex *loadGlobalModuleIndex(SourceLocation TriggerLoc) override;
 
   bool lookupMissingImports(StringRef Name, SourceLocation TriggerLoc) override;
+
+  void setGenModuleActionWrapper(std::function<std::unique_ptr<FrontendAction>
+    (const FrontendOptions &Opts, std::unique_ptr<FrontendAction> Action)> Wrapper) {
+    GenModuleActionWrapper = Wrapper;
+  };
+
+  std::function<std::unique_ptr<FrontendAction>
+    (const FrontendOptions &Opts, std::unique_ptr<FrontendAction> Action)>
+  getGenModuleActionWrapper() const { return GenModuleActionWrapper; }
 
   void addDependencyCollector(std::shared_ptr<DependencyCollector> Listener) {
     DependencyCollectors.push_back(std::move(Listener));

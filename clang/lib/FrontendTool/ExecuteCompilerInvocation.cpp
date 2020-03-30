@@ -22,6 +22,7 @@
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/FrontendTool/Utils.h"
+#include "clang/Index/IndexingAction.h"
 #include "clang/Rewrite/Frontend/FrontendActions.h"
 #include "clang/StaticAnalyzer/Frontend/AnalyzerHelpFlags.h"
 #include "clang/StaticAnalyzer/Frontend/FrontendActions.h"
@@ -174,6 +175,11 @@ CreateFrontendAction(CompilerInstance &CI) {
     }
   }
 #endif
+
+  if (!FEOpts.IndexStorePath.empty()) {
+    Act = index::createIndexDataRecordingAction(FEOpts, std::move(Act));
+    CI.setGenModuleActionWrapper(&index::createIndexDataRecordingAction);
+  }
 
   // If there are any AST files to merge, create a frontend action
   // adaptor to perform the merge.

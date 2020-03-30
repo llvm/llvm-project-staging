@@ -374,6 +374,10 @@ public:
   std::string MTMigrateDir;
   std::string ARCMTMigrateReportOut;
 
+  std::string IndexStorePath;
+  unsigned IndexIgnoreSystemSymbols : 1;
+  unsigned IndexRecordCodegenName : 1;
+
   /// The input files and their types.
   SmallVector<FrontendInputFile, 0> Inputs;
 
@@ -457,7 +461,9 @@ public:
         UseGlobalModuleIndex(true), GenerateGlobalModuleIndex(true),
         ASTDumpDecls(false), ASTDumpLookups(false),
         BuildingImplicitModule(false), ModulesEmbedAllFiles(false),
-        IncludeTimestamps(true), UseTemporary(true), TimeTraceGranularity(500) {}
+        IncludeTimestamps(true), UseTemporary(true),
+        IndexIgnoreSystemSymbols(false), IndexRecordCodegenName(false),
+        TimeTraceGranularity(500) {}
 
   /// getInputKindForExtension - Return the appropriate input kind for a file
   /// extension. For example, "c" would return Language::C.
