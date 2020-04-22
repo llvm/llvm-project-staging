@@ -184,7 +184,7 @@ public:
 
   /// Retrieve a module hash string that is suitable for uniquely
   /// identifying the conditions under which the module was built.
-  std::string getModuleHash() const;
+  std::string getModuleHash(DiagnosticsEngine &Diags) const;
 
   using StringAllocator = llvm::function_ref<const char *(const llvm::Twine &)>;
   /// Generate a cc1-compatible command line arguments from this instance.
