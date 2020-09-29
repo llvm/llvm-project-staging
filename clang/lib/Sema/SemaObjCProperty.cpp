@@ -645,14 +645,14 @@ ObjCPropertyDecl *Sema::CreatePropertyDecl(Scope *S,
     PDecl->setInvalidDecl();
   }
 
-  ProcessDeclAttributes(S, PDecl, FD.D);
-
   // Regardless of setter/getter attribute, we save the default getter/setter
   // selector names in anticipation of declaration of setter/getter methods.
   PDecl->setGetterName(GetterSel, GetterNameLoc);
   PDecl->setSetterName(SetterSel, SetterNameLoc);
   PDecl->setPropertyAttributesAsWritten(
                           makePropertyAttributesAsWritten(AttributesAsWritten));
+
+  ProcessDeclAttributes(S, PDecl, FD.D);
 
   if (Attributes & ObjCPropertyAttribute::kind_readonly)
     PDecl->setPropertyAttributes(ObjCPropertyAttribute::kind_readonly);
@@ -2523,6 +2523,8 @@ void Sema::ProcessPropertyDecl(ObjCPropertyDecl *property) {
           Context, SA->getName(), Loc, AttributeCommonInfo::AS_GNU,
           SectionAttr::GNU_section));
 
+    ProcessAPINotes(GetterMethod);
+
     if (getLangOpts().ObjCAutoRefCount)
       CheckARCMethodDecl(GetterMethod);
   } else
@@ -2595,6 +2597,9 @@ void Sema::ProcessPropertyDecl(ObjCPropertyDecl *property) {
         SetterMethod->addAttr(SectionAttr::CreateImplicit(
             Context, SA->getName(), Loc, AttributeCommonInfo::AS_GNU,
             SectionAttr::GNU_section));
+
+      ProcessAPINotes(SetterMethod);
+
       // It's possible for the user to have set a very odd custom
       // setter selector that causes it to have a method family.
       if (getLangOpts().ObjCAutoRefCount)

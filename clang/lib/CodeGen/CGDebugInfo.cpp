@@ -2599,7 +2599,7 @@ llvm::DIModule *CGDebugInfo::getOrCreateModuleRef(ASTSourceDescriptor Mod,
   std::string IncludePath = Mod.getPath().str();
   llvm::DIModule *DIMod =
       DBuilder.createModule(Parent, Mod.getModuleName(), ConfigMacros,
-                            RemapPath(IncludePath));
+                            RemapPath(IncludePath), M ? M->APINotesFile : "");
   ModuleCache[M].reset(DIMod);
   return DIMod;
 }

@@ -857,6 +857,21 @@ def forder_file_instrumentation : Flag<["-"], "forder-file-instrumentation">,
     Group<f_Group>, Flags<[CC1Option, CoreOption]>,
     HelpText<"Generate instrumented code to collect order file into default.profraw file (overridden by '=' form of option or LLVM_PROFILE_FILE env var)">;
 
+def fapinotes : Flag<["-"], "fapinotes">, Group<f_clang_Group>,
+  Flags<[CC1Option]>, HelpText<"Enable external API notes support">;
+def fapinotes_modules : Flag<["-"], "fapinotes-modules">, Group<f_clang_Group>,
+  Flags<[CC1Option]>, HelpText<"Enable module-based external API notes support">;
+def fno_apinotes : Flag<["-"], "fno-apinotes">, Group<f_clang_Group>,
+  Flags<[CC1Option]>, HelpText<"Disable external API notes support">;
+def fno_apinotes_modules : Flag<["-"], "fno-apinotes-modules">, Group<f_clang_Group>,
+  Flags<[CC1Option]>, HelpText<"Disable module-based external API notes support">;
+def fapinotes_cache_path : Joined<["-"], "fapinotes-cache-path=">,
+  Group<i_Group>, Flags<[DriverOption]>, MetaVarName<"<directory>">,
+  HelpText<"Does nothing; API notes are no longer cached separately from modules">;
+def fapinotes_swift_version : Joined<["-"], "fapinotes-swift-version=">,
+  Group<f_clang_Group>, Flags<[CC1Option]>, MetaVarName<"<version>">,
+  HelpText<"Specify the Swift version to use when filtering API notes">;
+
 defm addrsig : OptInFFlag<"addrsig", "Emit", "Don't emit", " an address-significance table", [CoreOption]>;
 defm blocks : OptInFFlag<"blocks", "Enable the 'blocks' language feature", "", "", [CoreOption]>;
 def fbootclasspath_EQ : Joined<["-"], "fbootclasspath=">, Group<f_Group>;
@@ -2118,6 +2133,8 @@ def ibuiltininc : Flag<["-"], "ibuiltininc">,
            "Using -nobuiltininc after the option disables it">;
 def index_header_map : Flag<["-"], "index-header-map">, Flags<[CC1Option]>,
   HelpText<"Make the next included directory (-I or -F) an indexer header map">;
+def iapinotes_modules : JoinedOrSeparate<["-"], "iapinotes-modules">, Group<clang_i_Group>, Flags<[CC1Option]>,
+  HelpText<"Add directory to the API notes search path referenced by module name">, MetaVarName<"<directory>">;
 def idirafter : JoinedOrSeparate<["-"], "idirafter">, Group<clang_i_Group>, Flags<[CC1Option]>,
   HelpText<"Add directory to AFTER include search path">;
 def iframework : JoinedOrSeparate<["-"], "iframework">, Group<clang_i_Group>, Flags<[CC1Option]>,

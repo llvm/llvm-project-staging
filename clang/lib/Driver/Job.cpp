@@ -95,6 +95,8 @@ static bool skipArgs(const char *Flag, bool HaveCrashVFS, int &SkipNum,
     return !HaveCrashVFS;
   if (FlagRef.startswith("-fmodules-cache-path="))
     return true;
+  if (FlagRef.startswith("-fapinotes-cache-path="))
+    return true;
 
   SkipNum = 0;
   return false;
